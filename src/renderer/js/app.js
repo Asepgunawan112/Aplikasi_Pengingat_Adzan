@@ -1,8 +1,9 @@
 
         let jadwalSholat = {}; 
-        let audioAdzan = new Audio('./src/assets/adzan.mp3'); // Masukin LINK disini kalo mau ganti suara adzan nya
+        let audioAdzan = new Audio('../assets/adzan.mp3'); // Path updated for Electron structure (relative to index.html)
         
         let audioEnabled = false; // Status izin audio
+        let lastCheckedMinute = ''; // Untuk mencegah adzan dipanggil berkali-kali di menit yang sama
 
         // --- 2. FUNGSI UTAMA (MAIN) ---
         function init() {
@@ -27,7 +28,7 @@
 
 
 
-        // --- 3. AMBIL LOKASI ---
+        //AMBIL LOKASI
         function ambilLokasi() {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(pos => {
@@ -38,14 +39,18 @@
                     cityName(lat, long);
                 }, err => {
                     document.getElementById('lokasi-txt').innerText = "Gagal ambil lokasi. Pastikan GPS aktif.";
+                    // Default fallback location if needed, or just show error
+                    console.error("Geolocation error:", err);
                 });
+            } else {
+                 document.getElementById('lokasi-txt').innerText = "Browser tidak mendukung Geolocation.";
             }
         }
 
     // API Jadwal Sholat dari Aladhan
         async function fetchJadwal(lat, long) {
             const timestamp = Math.floor(Date.now() / 1000);
-            // Method 20 = Kemenag RI (API nya ada dari kemenag coy)
+            // Kemenag RI (API nya ada dari kemenag coy)
             const url = `https://api.aladhan.com/v1/timings/${timestamp}?latitude=${lat}&longitude=${long}&method=20`;
             
             try {
@@ -85,28 +90,33 @@
         // --- 6. JAM REALTIME & CEK WAKTU ADZAN ---
         function updateJam() {
             const now = new Date();
-            // Format HH:MM:SS
             const timeString = now.toLocaleTimeString('id-ID', { hour12: false });
-            // Format HH:MM untuk bandingkan dengan jadwal
             const currentHM = timeString.substring(0, 5); 
 
             document.getElementById('jam-sekarang').innerText = timeString;
-
-            // Cek apakah detik ke-00 (supaya adzan tidak bunyi berkali-kali dalam 1 menit)
-            if (now.getSeconds() === 0) {
-                cekWaktuSholat(currentHM);
-            }
+            
+            // Cek waktu sholat setiap detik, tapi hanya panggil adzan sekali per menit
+            cekWaktuSholat(currentHM);
         }
 
         function cekWaktuSholat(waktuSekarang) {
+            // Jika menit ini sudah dicek, skip
+            if (lastCheckedMinute === waktuSekarang) {
+                return;
+            }
+
             for (const [nama, waktuJadwal] of Object.entries(jadwalSholat)) {
+                
                 if (waktuSekarang === waktuJadwal) {
+                    console.log(`🔔 Waktu ${nama}! Memanggil adzan...`);
+                    lastCheckedMinute = waktuSekarang; // Tandai sudah dicek
                     mainkanAdzan(nama);
+                    break; // Keluar setelah menemukan waktu yang cocok
                 }
             }
         }
 
-        // --- 7. AUDIO & POPUP ---
+        // AUDIO & POPUP
         function enableAudio() {
             audioAdzan.play().then(() => {
                 audioAdzan.pause();
@@ -117,15 +127,21 @@
         }
 
         function mainkanAdzan(namaSholat) {
-            if (audioEnabled) {
-                audioAdzan.src = './src/assets/adzan.mp3'; 
-                audioAdzan.currentTime = 0;
-                audioAdzan.play().catch(e => console.error("Audio play error:", e));
-            }
-            
             // Tampilkan Popup
             document.getElementById('nama-sholat').innerText = namaSholat;
             document.getElementById('modal-adzan').classList.remove('hidden');
+            
+            // Mainkan audio adzan
+            if (audioEnabled) {
+                audioAdzan.pause(); // Hentikan dulu jika sedang playing
+                audioAdzan.currentTime = 0; // Reset ke awal
+                audioAdzan.play().catch(e => {
+                    console.error("Audio play error:", e);
+                    // alert("Gagal memutar adzan: " + e.message); // Don't allow multiple alerts to block
+                });
+            } else {
+                // alert("Audio belum diaktifkan. Klik tombol 'Aktifkan Audio' terlebih dahulu.");
+            }
         }
 
         function tutupModal() {
