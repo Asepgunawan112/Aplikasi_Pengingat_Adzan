@@ -1,6 +1,8 @@
 
 let jadwalSholat = {}
-const audioAdzan = new Audio('../assets/adzan.mp3')
+// Pastikan path audio selalu benar walau lokasi file berubah
+const audioUrl = new URL('../assets/adzan.mp3', window.location.href)
+const audioAdzan = new Audio(audioUrl.href)
 
 let audioEnabled = false
 let lastCheckedMinute = ''
@@ -9,6 +11,11 @@ function init () {
     updateJam()
     ambilLokasi()
     setInterval(updateJam, 1000)
+    
+    // Auto-enable audio after short delay
+    setTimeout(() => {
+        autoEnableAudio()
+    }, 2000)
 }
 
 async function cityName (lat, long) {
@@ -81,12 +88,17 @@ async function getIpLocation() {
         
     } catch (error) {
         console.error('IP Location error:', error)
+
+        // Fallback ke lokasi default jika IP lookup gagal (Jakarta)
+        const fallbackLat = -6.2000
+        const fallbackLong = 106.8167
         lokasiTxt.innerHTML = `
-            Gagal deteksi lokasi. <br>
+            Gagal deteksi lokasi. Menggunakan lokasi default: Jakarta. <br>
             <button onclick="ambilLokasi()" class="mt-2 text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded hover:bg-emerald-200">
                 🔄 Coba Lagi
             </button>
         `
+        fetchJadwal(fallbackLat, fallbackLong)
     }
 }
 
@@ -130,7 +142,7 @@ function renderJadwal () {
     }
 }
 
-// --- 6. JAM REALTIME & CEK WAKTU ADZAN ---
+//JAM REALTIME & CEK WAKTU ADZAN
 function updateJam () {
     const now = new Date()
     const timeString = now.toLocaleTimeString('id-ID', { hour12: false })
@@ -158,13 +170,40 @@ function cekWaktuSholat (waktuSekarang) {
 }
 
 // AUDIO & POPUP
+function autoEnableAudio () {
+    // Try to enable audio automatically without user interaction
+    audioAdzan.play().then(() => {
+        audioAdzan.pause()
+        audioAdzan.currentTime = 0
+        audioEnabled = true
+        console.log('✅ Audio diaktifkan otomatis!')
+        updateAudioButton()
+    }).catch(e => {
+        console.warn('⚠️ Auto-enable gagal, user perlu klik tombol:', e)
+        audioEnabled = false
+    })
+}
+
 function enableAudio () {
     audioAdzan.play().then(() => {
         audioAdzan.pause()
         audioAdzan.currentTime = 0
         audioEnabled = true
         alert('Audio diaktifkan! Adzan akan bunyi otomatis.')
+        updateAudioButton()
     }).catch(e => alert('Gagal akses audio: ' + e))
+}
+
+function updateAudioButton () {
+    const btn = document.querySelector('button[onclick="enableAudio()"]')
+    if (btn && audioEnabled) {
+        btn.innerText = '✅ Suara Adzan Sudah Aktif'
+        btn.classList.remove('bg-emerald-500', 'hover:bg-emerald-600')
+        btn.classList.add('bg-gray-400', 'cursor-not-allowed')
+        btn.classList.remove('text-white')
+        btn.classList.add('text-black')
+        btn.disabled = true
+    }
 }
 
 function mainkanAdzan (namaSholat) {
@@ -173,13 +212,16 @@ function mainkanAdzan (namaSholat) {
     modal.classList.remove('hidden')
     modal.style.display = 'flex'
 
-    if (audioEnabled) {
-        audioAdzan.pause()
-        audioAdzan.currentTime = 0
-        audioAdzan.play().catch(e => {
-            console.error('Audio play error:', e)
-        })
-    }
+    // Always try to play audio
+    audioAdzan.pause()
+    audioAdzan.currentTime = 0
+    audioAdzan.play().then(() => {
+        console.log('🔊 Adzan berhasil diputar!')
+        audioEnabled = true
+    }).catch(e => {
+        console.error('❌ Audio play error:', e)
+        alert('Audio tidak bisa diputar! Klik tombol "Aktifkan Suara Adzan" terlebih dahulu.')
+    })
 }
 
 function tutupModal () {
@@ -211,6 +253,11 @@ audioAdzan.onended = function () {
     btn.innerText = '▶️ Coba Putar Adzan'
     btn.classList.remove('bg-red-500', 'hover:bg-red-600')
     btn.classList.add('bg-amber-800', 'hover:bg-amber-950')
+}
+
+audioAdzan.onerror = function (e) {
+    console.error('Audio error:', e)
+    alert('File audio tidak dapat dimuat. Pastikan adzan.mp3 ada di folder assets.')
 }
 
 init()

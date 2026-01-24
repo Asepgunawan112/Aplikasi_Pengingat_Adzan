@@ -5,6 +5,9 @@ let mainWindow
 let tray = null
 let isQuitting = false
 
+// Allow media playback without an explicit user gesture so adzan bisa otomatis diputar
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+
 function createWindow () {
   mainWindow = new BrowserWindow({
     width: 450,
